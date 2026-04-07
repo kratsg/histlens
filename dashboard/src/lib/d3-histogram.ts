@@ -1,6 +1,9 @@
 import * as d3 from 'd3'
 import type { HistDataPayload, AxisFull } from './types/protocol'
 
+const TRANSITION_MS = 350
+const EASE = d3.easeCubicOut
+
 // Flatten nested arrays to 1D (for 2D+ histograms, used by heatmap)
 function flatten(values: number | number[] | number[][]): number[] {
   if (typeof values === 'number') return [values]
@@ -8,221 +11,454 @@ function flatten(values: number | number[] | number[][]): number[] {
   return (values as number[][]).flat()
 }
 
-// --- 1D bar chart ---
+// ─── Tooltip ──────────────────────────────────────────────────────────────────
+
+function getOrCreateTooltip(): d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown> {
+  const existing = d3.select<HTMLDivElement, unknown>('#hist-tooltip')
+  if (!existing.empty()) return existing
+  return d3
+    .select('body')
+    .append('div')
+    .attr('id', 'hist-tooltip')
+    .style('position', 'fixed')
+    .style('pointer-events', 'none')
+    .style('opacity', '0')
+    .style('background', 'rgba(10,10,20,0.92)')
+    .style('border', '1px solid rgba(100,160,255,0.3)')
+    .style('border-radius', '4px')
+    .style('padding', '6px 10px')
+    .style('font-family', '"JetBrains Mono", "Fira Mono", monospace')
+    .style('font-size', '11px')
+    .style('line-height', '1.6')
+    .style('color', '#e0e8ff')
+    .style('backdrop-filter', 'blur(4px)')
+    .style('box-shadow', '0 4px 20px rgba(0,0,0,0.5)')
+    .style('z-index', '9999')
+    .style('white-space', 'nowrap')
+    .style('transition', 'opacity 0.12s ease')
+}
+
+function showTooltip(html: string, event: MouseEvent) {
+  const tt = getOrCreateTooltip()
+  tt.html(html).style('opacity', '1')
+  positionTooltip(tt, event)
+}
+
+function moveTooltip(event: MouseEvent) {
+  positionTooltip(getOrCreateTooltip(), event)
+}
+
+function hideTooltip() {
+  getOrCreateTooltip().style('opacity', '0')
+}
+
+function positionTooltip(
+  tt: d3.Selection<HTMLDivElement, unknown, HTMLElement, unknown>,
+  event: MouseEvent,
+) {
+  const margin = 14
+  const node = tt.node()!
+  const { clientX: x, clientY: y } = event
+  const { innerWidth: vw, innerHeight: vh } = window
+  const w = node.offsetWidth
+  const h = node.offsetHeight
+  const left = x + margin + w > vw ? x - w - margin : x + margin
+  const top = y + margin + h > vh ? y - h - margin : y + margin
+  tt.style('left', `${left}px`).style('top', `${top}px`)
+}
+
+// ─── Axis styling helpers ─────────────────────────────────────────────────────
+
+function styleAxis(g: d3.Selection<SVGGElement, unknown, null, undefined>) {
+  g.selectAll('.domain').attr('stroke', 'rgba(255,255,255,0.15)')
+  g.selectAll('.tick line').attr('stroke', 'rgba(255,255,255,0.15)')
+  g.selectAll('.tick text')
+    .attr('fill', 'rgba(200,210,240,0.7)')
+    .attr('font-family', '"JetBrains Mono", "Fira Mono", monospace')
+    .attr('font-size', '10px')
+}
+
+function axisLabel(
+  svg: d3.Selection<SVGGElement, unknown, null, undefined>,
+  text: string,
+  x: number,
+  y: number,
+  rotate = false,
+) {
+  const el = svg
+    .append('text')
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'rgba(180,200,240,0.6)')
+    .attr('font-family', '"JetBrains Mono", "Fira Mono", monospace')
+    .attr('font-size', '11px')
+    .attr('letter-spacing', '0.04em')
+    .text(text)
+  if (rotate) {
+    el.attr('transform', `rotate(-90)`).attr('x', -y).attr('y', x)
+  } else {
+    el.attr('x', x).attr('y', y)
+  }
+}
+
+// ─── Gridlines ────────────────────────────────────────────────────────────────
+
+function addGridlines(
+  svg: d3.Selection<SVGGElement, unknown, null, undefined>,
+  yScale: d3.ScaleLinear<number, number>,
+  w: number,
+) {
+  svg
+    .append('g')
+    .attr('class', 'grid')
+    .call(
+      d3
+        .axisLeft(yScale)
+        .ticks(5)
+        .tickSize(-w)
+        .tickFormat(() => ''),
+    )
+    .call((g) => {
+      g.selectAll('.domain').remove()
+      g.selectAll('.tick line')
+        .attr('stroke', 'rgba(255,255,255,0.06)')
+        .attr('stroke-dasharray', '3,3')
+    })
+}
+
+// ─── 1D bar chart ─────────────────────────────────────────────────────────────
+
+// Initialise the SVG skeleton once. Subsequent calls just update data.
+function ensureSkeleton1D(container: SVGSVGElement) {
+  const sel = d3.select(container)
+  if (!sel.select('g.root').empty()) return
+  const margin = { top: 20, right: 20, bottom: 44, left: 60 }
+  const width = container.clientWidth || 480
+  const height = container.clientHeight || 260
+  sel.attr('viewBox', `0 0 ${width} ${height}`)
+
+  const root = sel.append('g').attr('class', 'root').attr('transform', `translate(${margin.left},${margin.top})`)
+  root.append('g').attr('class', 'grid')
+  root.append('g').attr('class', 'bars')
+  root.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
+  root.append('g').attr('class', 'y-axis')
+  root.append('text').attr('class', 'x-label')
+  root.append('text').attr('class', 'y-label')
+}
 
 export function render1D(
   container: SVGSVGElement,
   data: HistDataPayload,
-  axis: AxisFull & { edges?: number[]; labels?: string[] },
+  axis: AxisFull,
 ) {
+  ensureSkeleton1D(container)
+
   const values = data.values as number[]
-  const margin = { top: 16, right: 16, bottom: 40, left: 56 }
-  const width = container.clientWidth || 400
-  const height = container.clientHeight || 240
+  const margin = { top: 20, right: 20, bottom: 44, left: 60 }
+  const width = container.clientWidth || 480
+  const height = container.clientHeight || 260
   const w = width - margin.left - margin.right
   const h = height - margin.top - margin.bottom
 
-  d3.select(container).selectAll('*').remove()
+  const isCategorical = 'labels' in axis && axis.labels != null
+  const labels = isCategorical ? (axis as { labels: string[] }).labels : null
+  const edges = !isCategorical ? (axis as { edges: number[] }).edges : null
 
-  const svg = d3
-    .select(container)
-    .attr('viewBox', `0 0 ${width} ${height}`)
-    .append('g')
-    .attr('transform', `translate(${margin.left},${margin.top})`)
-
+  // Build bar descriptors. Each bar carries enough info for the tooltip.
+  type Bar = { key: string; x0: number; x1: number; xPx: number; wPx: number; value: number; binLabel: string }
+  let bars: Bar[]
   let xScale: d3.ScaleBand<string> | d3.ScaleLinear<number, number>
-  let xAxis: d3.Axis<string> | d3.Axis<d3.NumberValue>
-  let bars: { x: number | string; width: number; value: number }[]
 
-  if ('labels' in axis && axis.labels) {
-    // Categorical axis: band scale
-    const scale = d3.scaleBand().domain(axis.labels).range([0, w]).padding(0.1)
+  if (labels) {
+    const scale = d3.scaleBand<string>().domain(labels).range([0, w]).padding(0.08)
     xScale = scale
-    xAxis = d3.axisBottom(scale)
-    bars = axis.labels.map((lbl, i) => ({
-      x: lbl,
-      width: scale.bandwidth(),
+    bars = labels.map((lbl, i) => ({
+      key: lbl,
+      x0: i,
+      x1: i + 1,
+      xPx: scale(lbl)!,
+      wPx: scale.bandwidth(),
       value: values[i] ?? 0,
+      binLabel: lbl,
     }))
   } else {
-    // Continuous axis: linear scale on edges
-    const edges = axis.edges!
-    const scale = d3.scaleLinear().domain([edges[0], edges[edges.length - 1]]).range([0, w])
+    const scale = d3.scaleLinear().domain([edges![0], edges![edges!.length - 1]]).range([0, w])
     xScale = scale
-    xAxis = d3.axisBottom(scale)
     bars = values.map((v, i) => ({
-      x: edges[i],
-      width: scale(edges[i + 1]) - scale(edges[i]),
+      key: String(i),
+      x0: edges![i],
+      x1: edges![i + 1],
+      xPx: scale(edges![i]),
+      wPx: Math.max(0, scale(edges![i + 1]) - scale(edges![i]) - 0.5), // 0.5px gap
       value: v,
+      binLabel: `[${fmtNum(edges![i])}, ${fmtNum(edges![i + 1])})`,
     }))
   }
 
   const maxVal = d3.max(values) ?? 0
-  const yScale = d3.scaleLinear().domain([0, maxVal * 1.05 || 1]).range([h, 0])
+  const yScale = d3.scaleLinear().domain([0, maxVal * 1.08 || 1]).range([h, 0]).nice()
+  const t = d3.transition().duration(TRANSITION_MS).ease(EASE)
 
-  // Bars
-  if ('labels' in axis && axis.labels) {
-    const bScale = xScale as d3.ScaleBand<string>
-    svg
-      .selectAll('rect')
-      .data(bars)
-      .join('rect')
-      .attr('x', (d) => bScale(d.x as string)!)
-      .attr('y', (d) => yScale(d.value))
-      .attr('width', (d) => d.width)
-      .attr('height', (d) => h - yScale(d.value))
-      .attr('fill', 'steelblue')
-  } else {
-    const lScale = xScale as d3.ScaleLinear<number, number>
-    svg
-      .selectAll('rect')
-      .data(bars)
-      .join('rect')
-      .attr('x', (d) => lScale(d.x as number))
-      .attr('y', (d) => yScale(d.value))
-      .attr('width', (d) => d.width)
-      .attr('height', (d) => h - yScale(d.value))
-      .attr('fill', 'steelblue')
+  const svg = d3.select(container)
+  const root = svg.select<SVGGElement>('g.root')
+
+  // Gridlines (redraw — cheap)
+  root.select('g.grid').remove()
+  const grid = root.insert('g', ':first-child').attr('class', 'grid')
+  addGridlines(grid, yScale, w)
+
+  // Bars — D3 join with transition
+  const barFill = (v: number) => {
+    const t = maxVal > 0 ? v / maxVal : 0
+    // Interpolate from a cool mid-blue to a bright accent
+    return d3.interpolateRgb('#1e4a8a', '#60aaff')(t)
   }
 
-  // Axes
-  svg.append('g').attr('transform', `translate(0,${h})`).call(xAxis as d3.Axis<d3.NumberValue>)
-  svg.append('g').call(d3.axisLeft(yScale).ticks(5))
+  root
+    .select<SVGGElement>('g.bars')
+    .selectAll<SVGRectElement, Bar>('rect')
+    .data(bars, (d) => d.key)
+    .join(
+      (enter) =>
+        enter
+          .append('rect')
+          .attr('rx', 1)
+          .attr('x', (d) => d.xPx)
+          .attr('width', (d) => d.wPx)
+          .attr('y', h)
+          .attr('height', 0)
+          .attr('fill', (d) => barFill(d.value))
+          .attr('opacity', 0.9),
+      (update) => update,
+      (exit) => exit.transition(t).attr('y', h).attr('height', 0).remove(),
+    )
+    .on('mouseover', function (event: MouseEvent, d: Bar) {
+      d3.select(this).transition().duration(80).attr('opacity', 1).attr('filter', 'brightness(1.25)')
+      showTooltip(
+        `<span style="color:#60aaff;font-weight:700">${fmtCount(d.value)}</span> counts<br>` +
+          `<span style="color:#7090b0">bin: ${d.binLabel}</span>`,
+        event,
+      )
+    })
+    .on('mousemove', (event: MouseEvent) => moveTooltip(event))
+    .on('mouseout', function () {
+      d3.select(this).transition().duration(120).attr('opacity', 0.9).attr('filter', null)
+      hideTooltip()
+    })
+    .transition(t)
+    .attr('x', (d) => d.xPx)
+    .attr('width', (d) => d.wPx)
+    .attr('y', (d) => yScale(d.value))
+    .attr('height', (d) => h - yScale(d.value))
+    .attr('fill', (d) => barFill(d.value))
+
+  // X axis
+  const xAxisG = root.select<SVGGElement>('g.x-axis')
+  if (labels) {
+    xAxisG.transition(t).call(d3.axisBottom(xScale as d3.ScaleBand<string>))
+  } else {
+    xAxisG.transition(t).call(d3.axisBottom(xScale as d3.ScaleLinear<number, number>).ticks(6))
+  }
+  styleAxis(xAxisG)
+
+  // Y axis
+  const yAxisG = root.select<SVGGElement>('g.y-axis')
+  yAxisG.transition(t).call(d3.axisLeft(yScale).ticks(5).tickFormat((v) => fmtCount(v as number)))
+  styleAxis(yAxisG)
 
   // Axis labels
-  const xLabel = axis.label || axis.name
-  svg
-    .append('text')
-    .attr('x', w / 2)
-    .attr('y', h + margin.bottom - 4)
+  const xLbl = axis.label || axis.name
+  root.select('text.x-label')
+    .attr('x', w / 2).attr('y', h + margin.bottom - 6)
     .attr('text-anchor', 'middle')
-    .attr('font-size', '12px')
-    .text(xLabel)
+    .attr('fill', 'rgba(180,200,240,0.55)')
+    .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
+    .attr('font-size', '11px')
+    .attr('letter-spacing', '0.04em')
+    .text(xLbl)
 
-  svg
-    .append('text')
+  root.select('text.y-label')
     .attr('transform', 'rotate(-90)')
-    .attr('x', -h / 2)
-    .attr('y', -margin.left + 14)
+    .attr('x', -h / 2).attr('y', -margin.left + 14)
     .attr('text-anchor', 'middle')
-    .attr('font-size', '12px')
+    .attr('fill', 'rgba(180,200,240,0.55)')
+    .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
+    .attr('font-size', '11px')
+    .attr('letter-spacing', '0.04em')
     .text('counts')
 }
 
-// --- 2D heatmap ---
+// ─── 2D heatmap ───────────────────────────────────────────────────────────────
+
+function ensureSkeleton2D(container: SVGSVGElement) {
+  const sel = d3.select(container)
+  if (!sel.select('g.root').empty()) return
+  const margin = { top: 20, right: 72, bottom: 48, left: 60 }
+  const width = container.clientWidth || 480
+  const height = container.clientHeight || 340
+  sel.attr('viewBox', `0 0 ${width} ${height}`)
+  const root = sel.append('g').attr('class', 'root').attr('transform', `translate(${margin.left},${margin.top})`)
+  root.append('g').attr('class', 'cells')
+  root.append('g').attr('class', 'x-axis')
+  root.append('g').attr('class', 'y-axis')
+  root.append('text').attr('class', 'x-label')
+  root.append('text').attr('class', 'y-label')
+  // Colorbar group
+  const cb = root.append('g').attr('class', 'colorbar')
+  cb.append('defs').append('linearGradient').attr('id', 'cb-grad').attr('x1', '0%').attr('x2', '0%').attr('y1', '100%').attr('y2', '0%')
+  cb.append('rect').attr('class', 'cb-rect')
+  cb.append('g').attr('class', 'cb-axis')
+}
 
 export function render2D(container: SVGSVGElement, data: HistDataPayload) {
+  ensureSkeleton2D(container)
+
   const values = data.values as number[][]
   const [xAxis, yAxis] = data.axes
 
-  const margin = { top: 16, right: 60, bottom: 48, left: 56 }
-  const width = container.clientWidth || 400
-  const height = container.clientHeight || 320
+  const margin = { top: 20, right: 72, bottom: 48, left: 60 }
+  const width = container.clientWidth || 480
+  const height = container.clientHeight || 340
   const w = width - margin.left - margin.right
   const h = height - margin.top - margin.bottom
-
-  d3.select(container).selectAll('*').remove()
-
-  const svg = d3
-    .select(container)
-    .attr('viewBox', `0 0 ${width} ${height}`)
-    .append('g')
-    .attr('transform', `translate(${margin.left},${margin.top})`)
 
   const nx = values.length
   const ny = values[0]?.length ?? 0
 
-  const xScale = d3.scaleLinear().domain([0, nx]).range([0, w])
-  const yScale = d3.scaleLinear().domain([0, ny]).range([h, 0])
-
   const allVals = flatten(values)
-  const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([0, d3.max(allVals) ?? 1])
+  const maxVal = d3.max(allVals) ?? 1
+  const colorScale = d3.scaleSequential(d3.interpolateInferno).domain([0, maxVal])
 
-  // Cells
+  const t = d3.transition().duration(TRANSITION_MS).ease(EASE)
+
+  const cellW = w / nx
+  const cellH = h / ny
+
+  // X/Y scales for positioning
+  const xEdges = 'edges' in xAxis ? (xAxis as { edges: number[] }).edges : null
+  const yEdges = 'edges' in yAxis ? (yAxis as { edges: number[] }).edges : null
+  const xLabels = 'labels' in xAxis ? (xAxis as { labels: string[] }).labels : null
+  const yLabels = 'labels' in yAxis ? (yAxis as { labels: string[] }).labels : null
+
+  const xTickScale = xEdges
+    ? d3.scaleLinear().domain([xEdges[0], xEdges[nx]]).range([0, w])
+    : d3.scaleBand<string>().domain(xLabels ?? []).range([0, w])
+
+  const yTickScale = yEdges
+    ? d3.scaleLinear().domain([yEdges[0], yEdges[ny]]).range([h, 0])
+    : d3.scaleBand<string>().domain(yLabels ?? []).range([h, 0])
+
+  // Build flat cell array for D3 join
+  type Cell = { key: string; xi: number; yi: number; value: number; xLabel: string; yLabel: string }
+  const cells: Cell[] = []
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < ny; j++) {
-      svg
-        .append('rect')
-        .attr('x', xScale(i))
-        .attr('y', yScale(j + 1))
-        .attr('width', xScale(1) - xScale(0))
-        .attr('height', yScale(0) - yScale(1))
-        .attr('fill', colorScale(values[i][j]))
+      cells.push({
+        key: `${i}-${j}`,
+        xi: i,
+        yi: j,
+        value: values[i][j],
+        xLabel: xEdges ? `[${fmtNum(xEdges[i])}, ${fmtNum(xEdges[i + 1])})` : String(xLabels?.[i] ?? i),
+        yLabel: yEdges ? `[${fmtNum(yEdges[j])}, ${fmtNum(yEdges[j + 1])})` : String(yLabels?.[j] ?? j),
+      })
     }
   }
 
-  // X axis labels
-  const xEdges = 'edges' in xAxis ? xAxis.edges! : null
-  const xTickScale = xEdges
-    ? d3.scaleLinear().domain([xEdges[0], xEdges[nx]]).range([0, w])
-    : d3.scaleBand().domain((xAxis as { labels: string[] }).labels ?? []).range([0, w])
+  const svg = d3.select(container)
+  const root = svg.select<SVGGElement>('g.root')
 
-  svg.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(xTickScale as d3.AxisScale<d3.AxisDomain>).ticks(5))
+  root
+    .select<SVGGElement>('g.cells')
+    .selectAll<SVGRectElement, Cell>('rect')
+    .data(cells, (d) => d.key)
+    .join(
+      (enter) =>
+        enter
+          .append('rect')
+          .attr('x', (d) => d.xi * cellW)
+          .attr('y', (d) => h - (d.yi + 1) * cellH)
+          .attr('width', cellW)
+          .attr('height', cellH)
+          .attr('fill', (d) => colorScale(d.value))
+          .attr('opacity', 0),
+      (update) => update,
+      (exit) => exit.transition(t).attr('opacity', 0).remove(),
+    )
+    .on('mouseover', function (event: MouseEvent, d: Cell) {
+      d3.select(this).attr('outline', '1px solid rgba(255,255,255,0.6)').attr('filter', 'brightness(1.3)')
+      showTooltip(
+        `<span style="color:#f0a060;font-weight:700">${fmtCount(d.value)}</span> counts<br>` +
+          `<span style="color:#7090b0">x: ${d.xLabel}</span><br>` +
+          `<span style="color:#7090b0">y: ${d.yLabel}</span>`,
+        event,
+      )
+    })
+    .on('mousemove', (event: MouseEvent) => moveTooltip(event))
+    .on('mouseout', function () {
+      d3.select(this).attr('filter', null)
+      hideTooltip()
+    })
+    .transition(t)
+    .attr('x', (d) => d.xi * cellW)
+    .attr('y', (d) => h - (d.yi + 1) * cellH)
+    .attr('width', cellW)
+    .attr('height', cellH)
+    .attr('fill', (d) => colorScale(d.value))
+    .attr('opacity', 1)
 
-  const yEdges = 'edges' in yAxis ? yAxis.edges! : null
-  const yTickScale = yEdges
-    ? d3.scaleLinear().domain([yEdges[0], yEdges[ny]]).range([h, 0])
-    : d3.scaleBand().domain((yAxis as { labels: string[] }).labels ?? []).range([h, 0])
+  // Axes
+  const xAxisG = root.select<SVGGElement>('g.x-axis').attr('transform', `translate(0,${h})`)
+  xAxisG.transition(t).call(d3.axisBottom(xTickScale as d3.AxisScale<d3.AxisDomain>).ticks(5))
+  styleAxis(xAxisG)
 
-  svg.append('g').call(d3.axisLeft(yTickScale as d3.AxisScale<d3.AxisDomain>).ticks(5))
+  const yAxisG = root.select<SVGGElement>('g.y-axis')
+  yAxisG.transition(t).call(d3.axisLeft(yTickScale as d3.AxisScale<d3.AxisDomain>).ticks(5))
+  styleAxis(yAxisG)
 
-  // Axis labels
-  svg
-    .append('text')
-    .attr('x', w / 2)
-    .attr('y', h + margin.bottom - 4)
-    .attr('text-anchor', 'middle')
-    .attr('font-size', '12px')
-    .text(xAxis.label || xAxis.name)
+  axisLabel(root, xAxis.label || xAxis.name, w / 2, h + margin.bottom - 6)
+  axisLabel(root, yAxis.label || yAxis.name, -margin.left + 14, h / 2, true)
 
-  svg
-    .append('text')
-    .attr('transform', 'rotate(-90)')
-    .attr('x', -h / 2)
-    .attr('y', -margin.left + 14)
-    .attr('text-anchor', 'middle')
-    .attr('font-size', '12px')
-    .text(yAxis.label || yAxis.name)
+  // Colorbar
+  const cbX = w + 12
+  const cbW = 10
 
-  // Color bar
-  const cbHeight = h
-  const cbWidth = 12
-  const cbX = w + 10
-  const defs = svg.append('defs')
-  const gradId = 'colorbar-gradient'
-  const grad = defs
-    .append('linearGradient')
-    .attr('id', gradId)
-    .attr('x1', '0%')
-    .attr('x2', '0%')
-    .attr('y1', '100%')
-    .attr('y2', '0%')
-
-  const nStops = 10
-  d3.range(nStops + 1).forEach((i) => {
-    const t = i / nStops
-    grad
-      .append('stop')
-      .attr('offset', `${t * 100}%`)
-      .attr('stop-color', colorScale(t * (d3.max(allVals) ?? 1)))
+  const grad = root.select('defs #cb-grad')
+  d3.range(11).forEach((i) => {
+    const tVal = i / 10
+    const stop = grad.select(`stop:nth-child(${i + 1})`)
+    if (stop.empty()) {
+      grad.append('stop').attr('offset', `${tVal * 100}%`).attr('stop-color', colorScale(tVal * maxVal))
+    } else {
+      stop.attr('stop-color', colorScale(tVal * maxVal))
+    }
   })
 
-  svg
-    .append('rect')
-    .attr('x', cbX)
-    .attr('y', 0)
-    .attr('width', cbWidth)
-    .attr('height', cbHeight)
-    .style('fill', `url(#${gradId})`)
+  root.select('rect.cb-rect')
+    .attr('x', cbX).attr('y', 0).attr('width', cbW).attr('height', h)
+    .style('fill', 'url(#cb-grad)')
 
-  const cbScale = d3.scaleLinear().domain([0, d3.max(allVals) ?? 1]).range([cbHeight, 0])
-  svg
-    .append('g')
-    .attr('transform', `translate(${cbX + cbWidth},0)`)
-    .call(d3.axisRight(cbScale).ticks(4))
+  const cbScale = d3.scaleLinear().domain([0, maxVal]).range([h, 0])
+  const cbAxisG = root.select<SVGGElement>('g.cb-axis').attr('transform', `translate(${cbX + cbW},0)`)
+  cbAxisG.transition(t).call(d3.axisRight(cbScale).ticks(4).tickFormat((v) => fmtCount(v as number)))
+  styleAxis(cbAxisG)
 }
 
-// Entry point: picks 1D or 2D based on axis count
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmtNum(v: number): string {
+  // Compact: avoid excessive decimals
+  if (Number.isInteger(v)) return String(v)
+  const s = v.toPrecision(4)
+  return parseFloat(s).toString()
+}
+
+function fmtCount(v: number): string {
+  if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k`
+  return String(Math.round(v))
+}
+
+// ─── Entry point ──────────────────────────────────────────────────────────────
+
 export function renderHistogram(container: SVGSVGElement, data: HistDataPayload) {
   if (data.axes.length === 1) {
     render1D(container, data, data.axes[0])
