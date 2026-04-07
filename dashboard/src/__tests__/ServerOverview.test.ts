@@ -12,7 +12,7 @@ const mockStats: StatsPayload = {
   uptime_seconds: 3725,
   cpu_user: 0.5,
   cpu_system: 0.1,
-  rpc_calls_total: 42,
+  rpc_calls_total: { Init: 2, Fill: 35, Snapshot: 5 },
   observed_at: Date.now() / 1000,
 }
 
@@ -46,5 +46,11 @@ describe('ServerOverview', () => {
     stats.set(mockStats) // 3725s = 1h 2m 5s
     const { getByText } = render(ServerOverview)
     expect(getByText('1h 2m 5s')).toBeInTheDocument()
+  })
+
+  it('sums rpc_calls_total across all methods', () => {
+    stats.set(mockStats) // Init: 2 + Fill: 35 + Snapshot: 5 = 42
+    const { getByText } = render(ServerOverview)
+    expect(getByText('42')).toBeInTheDocument()
   })
 })

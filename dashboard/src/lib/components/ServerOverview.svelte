@@ -8,6 +8,17 @@
     return `${(n / 1024 ** 3).toFixed(2)} GB`
   }
 
+  function totalRpcCalls(counts: Record<string, number>): number {
+    return Object.values(counts).reduce((a, b) => a + b, 0)
+  }
+
+  function rpcBreakdown(counts: Record<string, number>): string {
+    return Object.entries(counts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(', ')
+  }
+
   function formatUptime(s: number): string {
     const h = Math.floor(s / 3600)
     const m = Math.floor((s % 3600) / 60)
@@ -40,9 +51,9 @@
         <span class="label">Active RPCs</span>
         <span class="value">{$stats.active_rpcs}</span>
       </div>
-      <div class="card">
+      <div class="card" title={rpcBreakdown($stats.rpc_calls_total)}>
         <span class="label">Total RPC Calls</span>
-        <span class="value">{$stats.rpc_calls_total}</span>
+        <span class="value">{totalRpcCalls($stats.rpc_calls_total)}</span>
       </div>
     </div>
   {:else}

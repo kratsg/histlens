@@ -16,7 +16,8 @@ export interface StatsPayload {
   uptime_seconds: number
   cpu_user: number
   cpu_system: number
-  rpc_calls_total: number
+  // Per-RPC-method call counts, e.g. { "Init": 2, "Fill": 40, "Snapshot": 1 }
+  rpc_calls_total: Record<string, number>
   observed_at: number
 }
 
