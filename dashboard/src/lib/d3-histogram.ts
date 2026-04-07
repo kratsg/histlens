@@ -38,17 +38,17 @@ function getOrCreateTooltip(): d3.Selection<HTMLDivElement, unknown, HTMLElement
     .style('transition', 'opacity 0.12s ease')
 }
 
-function showTooltip(html: string, event: MouseEvent) {
+export function showTooltip(html: string, event: MouseEvent) {
   const tt = getOrCreateTooltip()
   tt.html(html).style('opacity', '1')
   positionTooltip(tt, event)
 }
 
-function moveTooltip(event: MouseEvent) {
+export function moveTooltip(event: MouseEvent) {
   positionTooltip(getOrCreateTooltip(), event)
 }
 
-function hideTooltip() {
+export function hideTooltip() {
   getOrCreateTooltip().style('opacity', '0')
 }
 
@@ -69,35 +69,13 @@ function positionTooltip(
 
 // ─── Axis styling helpers ─────────────────────────────────────────────────────
 
-function styleAxis(g: d3.Selection<SVGGElement, unknown, null, undefined>) {
+export function styleAxis(g: d3.Selection<SVGGElement, unknown, null, undefined>) {
   g.selectAll('.domain').attr('stroke', 'rgba(255,255,255,0.15)')
   g.selectAll('.tick line').attr('stroke', 'rgba(255,255,255,0.15)')
   g.selectAll('.tick text')
     .attr('fill', 'rgba(200,210,240,0.7)')
     .attr('font-family', '"JetBrains Mono", "Fira Mono", monospace')
     .attr('font-size', '10px')
-}
-
-function axisLabel(
-  svg: d3.Selection<SVGGElement, unknown, null, undefined>,
-  text: string,
-  x: number,
-  y: number,
-  rotate = false,
-) {
-  const el = svg
-    .append('text')
-    .attr('text-anchor', 'middle')
-    .attr('fill', 'rgba(180,200,240,0.6)')
-    .attr('font-family', '"JetBrains Mono", "Fira Mono", monospace')
-    .attr('font-size', '11px')
-    .attr('letter-spacing', '0.04em')
-    .text(text)
-  if (rotate) {
-    el.attr('transform', `rotate(-90)`).attr('x', -y).attr('y', x)
-  } else {
-    el.attr('x', x).attr('y', y)
-  }
 }
 
 // ─── Gridlines ────────────────────────────────────────────────────────────────
@@ -208,9 +186,9 @@ export function render1D(
 
   // Bars — D3 join with transition
   const barFill = (v: number) => {
-    const t = maxVal > 0 ? v / maxVal : 0
+    const ratio = maxVal > 0 ? v / maxVal : 0
     // Interpolate from a cool mid-blue to a bright accent
-    return d3.interpolateRgb('#1e4a8a', '#60aaff')(t)
+    return d3.interpolateRgb('#1e4a8a', '#60aaff')(ratio)
   }
 
   root
@@ -384,7 +362,7 @@ export function render2D(container: SVGSVGElement, data: HistDataPayload) {
       (exit) => exit.transition(t).attr('opacity', 0).remove(),
     )
     .on('mouseover', function (event: MouseEvent, d: Cell) {
-      d3.select(this).attr('outline', '1px solid rgba(255,255,255,0.6)').attr('filter', 'brightness(1.3)')
+      d3.select(this).attr('stroke', 'rgba(255,255,255,0.6)').attr('stroke-width', '1').attr('filter', 'brightness(1.3)')
       showTooltip(
         `<span style="color:#f0a060;font-weight:700">${fmtCount(d.value)}</span> counts<br>` +
           `<span style="color:#7090b0">x: ${d.xLabel}</span><br>` +
@@ -394,7 +372,7 @@ export function render2D(container: SVGSVGElement, data: HistDataPayload) {
     })
     .on('mousemove', (event: MouseEvent) => moveTooltip(event))
     .on('mouseout', function () {
-      d3.select(this).attr('filter', null)
+      d3.select(this).attr('stroke', null).attr('stroke-width', null).attr('filter', null)
       hideTooltip()
     })
     .transition(t)
@@ -414,8 +392,24 @@ export function render2D(container: SVGSVGElement, data: HistDataPayload) {
   yAxisG.transition(t).call(d3.axisLeft(yTickScale as d3.AxisScale<d3.AxisDomain>).ticks(5))
   styleAxis(yAxisG)
 
-  axisLabel(root, xAxis.label || xAxis.name, w / 2, h + margin.bottom - 6)
-  axisLabel(root, yAxis.label || yAxis.name, -margin.left + 14, h / 2, true)
+  root.select('text.x-label')
+    .attr('x', w / 2).attr('y', h + margin.bottom - 6)
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'rgba(180,200,240,0.55)')
+    .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
+    .attr('font-size', '11px')
+    .attr('letter-spacing', '0.04em')
+    .text(xAxis.label || xAxis.name)
+
+  root.select('text.y-label')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -h / 2).attr('y', -margin.left + 14)
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'rgba(180,200,240,0.55)')
+    .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
+    .attr('font-size', '11px')
+    .attr('letter-spacing', '0.04em')
+    .text(yAxis.label || yAxis.name)
 
   // Colorbar
   const cbX = w + 12
