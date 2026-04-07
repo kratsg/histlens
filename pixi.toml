@@ -2,10 +2,11 @@
 authors = ["Giordon Stark <kratsg@gmail.com>"]
 channels = ["conda-forge"]
 name = "histlens"
-platforms = ["osx-arm64"]
+platforms = ["osx-arm64", "linux-64"]
 version = "0.1.0"
 
 [tasks]
+dashboard-install = { cmd = "bun install", cwd = "dashboard" }
 dashboard-dev = { cmd = "bun run dev", cwd = "dashboard" }
 dashboard-build = { cmd = "bun run build", cwd = "dashboard" }
 dashboard-test = { cmd = "bun run test", cwd = "dashboard" }
