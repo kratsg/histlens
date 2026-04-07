@@ -4,13 +4,15 @@
 
   let container: SVGSVGElement
 
+  const totalCalls = (r: Record<string, number>) => Object.values(r).reduce((a, b) => a + b, 0)
+
   // Compute per-second deltas between consecutive history points
   function deltas(history: typeof $statsHistory): { t: number; rate: number }[] {
     const result: { t: number; rate: number }[] = []
     for (let i = 1; i < history.length; i++) {
       const dt = history[i].observed_at - history[i - 1].observed_at
       if (dt <= 0) continue
-      const dCalls = history[i].rpc_calls_total - history[i - 1].rpc_calls_total
+      const dCalls = totalCalls(history[i].rpc_calls_total) - totalCalls(history[i - 1].rpc_calls_total)
       result.push({ t: history[i].observed_at, rate: dCalls / dt })
     }
     return result

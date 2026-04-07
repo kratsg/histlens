@@ -25,9 +25,11 @@
   <main class="content">
     <HistogramList bind:selectedId />
     {#if selectedId}
-      <div class="detail">
-        <HistogramView hist_id={selectedId} />
-      </div>
+      {#key selectedId}
+        <div class="detail">
+          <HistogramView hist_id={selectedId} />
+        </div>
+      {/key}
     {:else}
       <p class="hint">Click a histogram above to inspect it.</p>
     {/if}
