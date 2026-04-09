@@ -115,20 +115,22 @@ function ensureSkeleton1D(container: SVGSVGElement) {
   const height = container.clientHeight || 260
   sel.attr('viewBox', `0 0 ${width} ${height}`)
 
-  const root = sel.append('g').attr('class', 'root').attr('transform', `translate(${margin.left},${margin.top})`)
+  const root = sel
+    .append('g')
+    .attr('class', 'root')
+    .attr('transform', `translate(${margin.left},${margin.top})`)
   root.append('g').attr('class', 'grid')
   root.append('g').attr('class', 'bars')
-  root.append('g').attr('class', 'x-axis').attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
+  root
+    .append('g')
+    .attr('class', 'x-axis')
+    .attr('transform', `translate(0,${height - margin.top - margin.bottom})`)
   root.append('g').attr('class', 'y-axis')
   root.append('text').attr('class', 'x-label')
   root.append('text').attr('class', 'y-label')
 }
 
-export function render1D(
-  container: SVGSVGElement,
-  values: number[],
-  axis: RenderAxis,
-) {
+export function render1D(container: SVGSVGElement, values: number[], axis: RenderAxis) {
   ensureSkeleton1D(container)
 
   const margin = { top: 20, right: 20, bottom: 44, left: 60 }
@@ -142,7 +144,15 @@ export function render1D(
   const edges = !isCategorical ? axis.edges : null
 
   // Build bar descriptors. Each bar carries enough info for the tooltip.
-  type Bar = { key: string; x0: number; x1: number; xPx: number; wPx: number; value: number; binLabel: string }
+  type Bar = {
+    key: string
+    x0: number
+    x1: number
+    xPx: number
+    wPx: number
+    value: number
+    binLabel: string
+  }
   let bars: Bar[]
   let xScale: d3.ScaleBand<string> | d3.ScaleLinear<number, number>
 
@@ -159,7 +169,10 @@ export function render1D(
       binLabel: lbl,
     }))
   } else {
-    const scale = d3.scaleLinear().domain([edges![0], edges![edges!.length - 1]]).range([0, w])
+    const scale = d3
+      .scaleLinear()
+      .domain([edges![0], edges![edges!.length - 1]])
+      .range([0, w])
     xScale = scale
     bars = values.map((v, i) => ({
       key: String(i),
@@ -173,7 +186,11 @@ export function render1D(
   }
 
   const maxVal = d3.max(values) ?? 0
-  const yScale = d3.scaleLinear().domain([0, maxVal * 1.08 || 1]).range([h, 0]).nice()
+  const yScale = d3
+    .scaleLinear()
+    .domain([0, maxVal * 1.08 || 1])
+    .range([h, 0])
+    .nice()
   const t = d3.transition().duration(TRANSITION_MS).ease(EASE)
 
   const svg = d3.select(container)
@@ -210,7 +227,11 @@ export function render1D(
       (exit) => exit.transition(t).attr('y', h).attr('height', 0).remove(),
     )
     .on('mouseover', function (event: MouseEvent, d: Bar) {
-      d3.select(this).transition().duration(80).attr('opacity', 1).attr('filter', 'brightness(1.25)')
+      d3.select(this)
+        .transition()
+        .duration(80)
+        .attr('opacity', 1)
+        .attr('filter', 'brightness(1.25)')
       showTooltip(
         `<span style="color:#60aaff;font-weight:700">${fmtCount(d.value)}</span> counts<br>` +
           `<span style="color:#7090b0">bin: ${d.binLabel}</span>`,
@@ -240,13 +261,20 @@ export function render1D(
 
   // Y axis
   const yAxisG = root.select<SVGGElement>('g.y-axis')
-  yAxisG.transition(t).call(d3.axisLeft(yScale).ticks(5).tickFormat((v) => fmtCount(v as number)))
+  yAxisG.transition(t).call(
+    d3
+      .axisLeft(yScale)
+      .ticks(5)
+      .tickFormat((v) => fmtCount(v as number)),
+  )
   styleAxis(yAxisG)
 
   // Axis labels
   const xLbl = axis.label || axis.name
-  root.select('text.x-label')
-    .attr('x', w / 2).attr('y', h + margin.bottom - 6)
+  root
+    .select('text.x-label')
+    .attr('x', w / 2)
+    .attr('y', h + margin.bottom - 6)
     .attr('text-anchor', 'middle')
     .attr('fill', 'rgba(180,200,240,0.55)')
     .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
@@ -254,9 +282,11 @@ export function render1D(
     .attr('letter-spacing', '0.04em')
     .text(xLbl)
 
-  root.select('text.y-label')
+  root
+    .select('text.y-label')
     .attr('transform', 'rotate(-90)')
-    .attr('x', -h / 2).attr('y', -margin.left + 14)
+    .attr('x', -h / 2)
+    .attr('y', -margin.left + 14)
     .attr('text-anchor', 'middle')
     .attr('fill', 'rgba(180,200,240,0.55)')
     .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
@@ -274,7 +304,10 @@ function ensureSkeleton2D(container: SVGSVGElement) {
   const width = container.clientWidth || 480
   const height = container.clientHeight || 340
   sel.attr('viewBox', `0 0 ${width} ${height}`)
-  const root = sel.append('g').attr('class', 'root').attr('transform', `translate(${margin.left},${margin.top})`)
+  const root = sel
+    .append('g')
+    .attr('class', 'root')
+    .attr('transform', `translate(${margin.left},${margin.top})`)
   root.append('g').attr('class', 'cells')
   root.append('g').attr('class', 'x-axis')
   root.append('g').attr('class', 'y-axis')
@@ -282,7 +315,13 @@ function ensureSkeleton2D(container: SVGSVGElement) {
   root.append('text').attr('class', 'y-label')
   // Colorbar group
   const cb = root.append('g').attr('class', 'colorbar')
-  cb.append('defs').append('linearGradient').attr('id', 'cb-grad').attr('x1', '0%').attr('x2', '0%').attr('y1', '100%').attr('y2', '0%')
+  cb.append('defs')
+    .append('linearGradient')
+    .attr('id', 'cb-grad')
+    .attr('x1', '0%')
+    .attr('x2', '0%')
+    .attr('y1', '100%')
+    .attr('y2', '0%')
   cb.append('rect').attr('class', 'cb-rect')
   cb.append('g').attr('class', 'cb-axis')
 }
@@ -321,11 +360,17 @@ export function render2D(
 
   const xTickScale = xEdges
     ? d3.scaleLinear().domain([xEdges[0], xEdges[nx]]).range([0, w])
-    : d3.scaleBand<string>().domain(xLabels ?? []).range([0, w])
+    : d3
+        .scaleBand<string>()
+        .domain(xLabels ?? [])
+        .range([0, w])
 
   const yTickScale = yEdges
     ? d3.scaleLinear().domain([yEdges[0], yEdges[ny]]).range([h, 0])
-    : d3.scaleBand<string>().domain(yLabels ?? []).range([h, 0])
+    : d3
+        .scaleBand<string>()
+        .domain(yLabels ?? [])
+        .range([h, 0])
 
   // Build flat cell array for D3 join
   type Cell = { key: string; xi: number; yi: number; value: number; xLabel: string; yLabel: string }
@@ -337,8 +382,12 @@ export function render2D(
         xi: i,
         yi: j,
         value: values[i][j],
-        xLabel: xEdges ? `[${fmtNum(xEdges[i])}, ${fmtNum(xEdges[i + 1])})` : String(xLabels?.[i] ?? i),
-        yLabel: yEdges ? `[${fmtNum(yEdges[j])}, ${fmtNum(yEdges[j + 1])})` : String(yLabels?.[j] ?? j),
+        xLabel: xEdges
+          ? `[${fmtNum(xEdges[i])}, ${fmtNum(xEdges[i + 1])})`
+          : String(xLabels?.[i] ?? i),
+        yLabel: yEdges
+          ? `[${fmtNum(yEdges[j])}, ${fmtNum(yEdges[j + 1])})`
+          : String(yLabels?.[j] ?? j),
       })
     }
   }
@@ -364,7 +413,10 @@ export function render2D(
       (exit) => exit.transition(t).attr('opacity', 0).remove(),
     )
     .on('mouseover', function (event: MouseEvent, d: Cell) {
-      d3.select(this).attr('stroke', 'rgba(255,255,255,0.6)').attr('stroke-width', '1').attr('filter', 'brightness(1.3)')
+      d3.select(this)
+        .attr('stroke', 'rgba(255,255,255,0.6)')
+        .attr('stroke-width', '1')
+        .attr('filter', 'brightness(1.3)')
       showTooltip(
         `<span style="color:#f0a060;font-weight:700">${fmtCount(d.value)}</span> counts<br>` +
           `<span style="color:#7090b0">x: ${d.xLabel}</span><br>` +
@@ -394,8 +446,10 @@ export function render2D(
   yAxisG.transition(t).call(d3.axisLeft(yTickScale as d3.AxisScale<d3.AxisDomain>).ticks(5))
   styleAxis(yAxisG)
 
-  root.select('text.x-label')
-    .attr('x', w / 2).attr('y', h + margin.bottom - 6)
+  root
+    .select('text.x-label')
+    .attr('x', w / 2)
+    .attr('y', h + margin.bottom - 6)
     .attr('text-anchor', 'middle')
     .attr('fill', 'rgba(180,200,240,0.55)')
     .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
@@ -403,9 +457,11 @@ export function render2D(
     .attr('letter-spacing', '0.04em')
     .text(xAxis.label || xAxis.name)
 
-  root.select('text.y-label')
+  root
+    .select('text.y-label')
     .attr('transform', 'rotate(-90)')
-    .attr('x', -h / 2).attr('y', -margin.left + 14)
+    .attr('x', -h / 2)
+    .attr('y', -margin.left + 14)
     .attr('text-anchor', 'middle')
     .attr('fill', 'rgba(180,200,240,0.55)')
     .attr('font-family', '"JetBrains Mono","Fira Mono",monospace')
@@ -422,19 +478,33 @@ export function render2D(
     const tVal = i / 10
     const stop = grad.select(`stop:nth-child(${i + 1})`)
     if (stop.empty()) {
-      grad.append('stop').attr('offset', `${tVal * 100}%`).attr('stop-color', colorScale(tVal * maxVal))
+      grad
+        .append('stop')
+        .attr('offset', `${tVal * 100}%`)
+        .attr('stop-color', colorScale(tVal * maxVal))
     } else {
       stop.attr('stop-color', colorScale(tVal * maxVal))
     }
   })
 
-  root.select('rect.cb-rect')
-    .attr('x', cbX).attr('y', 0).attr('width', cbW).attr('height', h)
+  root
+    .select('rect.cb-rect')
+    .attr('x', cbX)
+    .attr('y', 0)
+    .attr('width', cbW)
+    .attr('height', h)
     .style('fill', 'url(#cb-grad)')
 
   const cbScale = d3.scaleLinear().domain([0, maxVal]).range([h, 0])
-  const cbAxisG = root.select<SVGGElement>('g.cb-axis').attr('transform', `translate(${cbX + cbW},0)`)
-  cbAxisG.transition(t).call(d3.axisRight(cbScale).ticks(4).tickFormat((v) => fmtCount(v as number)))
+  const cbAxisG = root
+    .select<SVGGElement>('g.cb-axis')
+    .attr('transform', `translate(${cbX + cbW},0)`)
+  cbAxisG.transition(t).call(
+    d3
+      .axisRight(cbScale)
+      .ticks(4)
+      .tickFormat((v) => fmtCount(v as number)),
+  )
   styleAxis(cbAxisG)
 }
 

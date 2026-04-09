@@ -12,8 +12,7 @@ repos:
       - id: dashboard-format-check
         name: dashboard format check (prettier)
         language: system
-        entry: pixi run
-        args: [bun, run, format:check]
+        entry: pixi run dashboard-format-check
         pass_filenames: false
         files: ^dashboard/src/
 

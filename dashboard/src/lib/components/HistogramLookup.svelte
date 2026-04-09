@@ -3,7 +3,12 @@
   import type { HistMetaPayload } from '../types/protocol'
 
   const dispatch = createEventDispatcher<{
-    view: { hist_id: string; token: string | null; selection: Record<string, string | number>; meta: HistMetaPayload }
+    view: {
+      hist_id: string
+      token: string | null
+      selection: Record<string, string | number>
+      meta: HistMetaPayload
+    }
   }>()
 
   let histId = ''
@@ -31,7 +36,9 @@
         return
       }
       if (!resp.ok) {
-        const body = (await resp.json().catch(() => ({ error: resp.statusText }))) as { error?: string }
+        const body = (await resp.json().catch(() => ({ error: resp.statusText }))) as {
+          error?: string
+        }
         error = body.error ?? `Server error (${resp.status})`
         return
       }
@@ -63,7 +70,8 @@
         const name = ax.metadata?.name ?? ''
         if (ax.type === 'regular') return `${name}[${ax.bins}]`
         if (ax.type === 'variable') return `${name}[${ax.edges.length - 1}]`
-        if (ax.type === 'category_str' || ax.type === 'category_int') return `${name}[${ax.categories.length}]`
+        if (ax.type === 'category_str' || ax.type === 'category_int')
+          return `${name}[${ax.categories.length}]`
         return name
       })
       .join(' × ')
@@ -91,12 +99,7 @@
       </label>
       <label class="field">
         <span>Token <span class="optional">(optional)</span></span>
-        <input
-          bind:value={token}
-          type="password"
-          placeholder="—"
-          autocomplete="off"
-        />
+        <input bind:value={token} type="password" placeholder="—" autocomplete="off" />
       </label>
       <button type="submit" class="btn" disabled={loading || !histId.trim()}>
         {loading ? 'Looking up…' : 'Look up'}
@@ -224,7 +227,9 @@
     font-size: 0.8rem;
     padding: 0.38rem 0.85rem;
     white-space: nowrap;
-    transition: background 0.15s, border-color 0.15s;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
     align-self: flex-end;
   }
   .btn:hover:not(:disabled) {

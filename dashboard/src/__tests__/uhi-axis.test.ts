@@ -195,14 +195,33 @@ describe('trimFlowBins2D', () => {
   it('trims underflow and overflow in both dimensions', () => {
     // 4x4: [underflow_x[underflow_y, y0, y1, overflow_y], x0[...], x1[...], overflow_x[...]]
     const values = [
-      [0, 0, 0, 0],  // underflow x row
-      [0, 1, 2, 0],  // x=0 row
-      [0, 3, 4, 0],  // x=1 row
-      [0, 0, 0, 0],  // overflow x row
+      [0, 0, 0, 0], // underflow x row
+      [0, 1, 2, 0], // x=0 row
+      [0, 3, 4, 0], // x=1 row
+      [0, 0, 0, 0], // overflow x row
     ]
-    const xAxis: UhiAxis = { type: 'regular', lower: 0, upper: 2, bins: 2, underflow: true, overflow: true, circular: false }
-    const yAxis: UhiAxis = { type: 'regular', lower: 0, upper: 2, bins: 2, underflow: true, overflow: true, circular: false }
+    const xAxis: UhiAxis = {
+      type: 'regular',
+      lower: 0,
+      upper: 2,
+      bins: 2,
+      underflow: true,
+      overflow: true,
+      circular: false,
+    }
+    const yAxis: UhiAxis = {
+      type: 'regular',
+      lower: 0,
+      upper: 2,
+      bins: 2,
+      underflow: true,
+      overflow: true,
+      circular: false,
+    }
     const result = trimFlowBins2D(values, xAxis, yAxis)
-    expect(result).toEqual([[1, 2], [3, 4]])
+    expect(result).toEqual([
+      [1, 2],
+      [3, 4],
+    ])
   })
 })

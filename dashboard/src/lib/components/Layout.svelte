@@ -16,7 +16,14 @@
 
   let views: SliceView[] = []
 
-  function addView(event: CustomEvent<{ hist_id: string; token: string | null; selection: Record<string, string | number>; meta: HistMetaPayload }>) {
+  function addView(
+    event: CustomEvent<{
+      hist_id: string
+      token: string | null
+      selection: Record<string, string | number>
+      meta: HistMetaPayload
+    }>,
+  ) {
     const { hist_id, selection, meta } = event.detail
     // Use hist_id + serialized selection as a unique key so the same slice isn't duplicated
     const id = `${hist_id}:${JSON.stringify(selection)}`

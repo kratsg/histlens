@@ -12,6 +12,7 @@ dashboard-build = { cmd = "bun run build", cwd = "dashboard" }
 dashboard-test = { cmd = "bun run test", cwd = "dashboard" }
 dashboard-lint = { cmd = "bun run lint", cwd = "dashboard" }
 dashboard-format = { cmd = "bun run format", cwd = "dashboard" }
+dashboard-format-check = { cmd = "bun run format:check", cwd = "dashboard" }
 dashboard-check = { cmd = "bun run check", cwd = "dashboard" }
 lint = "pre-commit run --all-files"
 

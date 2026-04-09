@@ -23,10 +23,7 @@ export function subscribeHist(
   send({ type: 'subscribe_hist', payload: { hist_id, selection, rate_limit_hz } })
 }
 
-export function unsubscribeHist(
-  hist_id: string,
-  selection: Record<string, string | number>,
-) {
+export function unsubscribeHist(hist_id: string, selection: Record<string, string | number>) {
   send({ type: 'unsubscribe_hist', payload: { hist_id, selection } })
   histogramData.update((m) => {
     const next = new Map(m)

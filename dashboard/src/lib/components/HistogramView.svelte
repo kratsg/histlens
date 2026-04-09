@@ -61,7 +61,9 @@
     </div>
     <div class="header-right">
       <span class="dim">{dimDesc(meta)}</span>
-      <button class="close-btn" on:click={() => dispatch('close')} title="Remove this view">×</button>
+      <button class="close-btn" on:click={() => dispatch('close')} title="Remove this view"
+        >×</button
+      >
     </div>
   </div>
 
@@ -131,7 +133,9 @@
     font-size: 1rem;
     line-height: 1;
     padding: 1px 6px;
-    transition: color 0.15s, border-color 0.15s;
+    transition:
+      color 0.15s,
+      border-color 0.15s;
   }
   .close-btn:hover {
     color: var(--color-fg, #e0e0f0);

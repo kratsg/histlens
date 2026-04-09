@@ -44,7 +44,10 @@ describe('WebSocket store', () => {
   it('send() serializes message as JSON', () => {
     send({ type: 'get_hist', payload: { hist_id: 'abc123', selection: {} } })
     const last = MockWS.instance.sent.at(-1)!
-    expect(JSON.parse(last)).toMatchObject({ type: 'get_hist', payload: { hist_id: 'abc123', selection: {} } })
+    expect(JSON.parse(last)).toMatchObject({
+      type: 'get_hist',
+      payload: { hist_id: 'abc123', selection: {} },
+    })
   })
 
   it('onMessage routes by type', () => {

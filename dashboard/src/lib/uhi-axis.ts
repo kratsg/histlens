@@ -92,7 +92,10 @@ export function trimFlowBins2D(values: number[][], xAxis: UhiAxis, yAxis: UhiAxi
     if (xAxis.underflow) xStart += 1
     if (xAxis.overflow) xEnd -= 1
   } else if (xAxis.type === 'category_str' || xAxis.type === 'category_int') {
-    if (xAxis.flow) { xStart += 1; xEnd -= 1 }
+    if (xAxis.flow) {
+      xStart += 1
+      xEnd -= 1
+    }
   }
 
   // Trim y (inner arrays) using 1D logic on each row
