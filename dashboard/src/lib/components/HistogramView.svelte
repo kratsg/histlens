@@ -1,21 +1,24 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte'
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte'
   import { histogramData, subscribeHist, unsubscribeHist } from '../stores/histogramData'
   import { renderHistogram } from '../d3-histogram'
-  import type { HistDataPayload } from '../types/protocol'
+  import type { HistMetaPayload } from '../types/protocol'
 
   export let hist_id: string
+  export let selection: Record<string, string | number>
+  export let meta: HistMetaPayload
+
+  const dispatch = createEventDispatcher<{ close: void }>()
 
   let container: SVGSVGElement
   let lastVersion: number | null = null
 
-  // Subscribe on mount, unsubscribe on destroy
   onMount(() => {
-    subscribeHist(hist_id)
+    subscribeHist(hist_id, selection)
   })
 
   onDestroy(() => {
-    unsubscribeHist(hist_id)
+    unsubscribeHist(hist_id, selection)
   })
 
   $: data = $histogramData.get(hist_id) ?? null
@@ -23,23 +26,46 @@
   // Re-render only when version changes (new data arrived)
   $: if (container && data && data.version !== lastVersion) {
     lastVersion = data.version
-    renderHistogram(container, data)
+    renderHistogram(container, data, meta)
   }
 
-  function dimDesc(data: HistDataPayload): string {
-    return `${data.axes.length}D · ${data.axes.map((a) => a.name).join(' × ')}`
+  function histName(): string {
+    return meta.dense_metadata.metadata.name || hist_id.slice(0, 12)
+  }
+
+  function histLabel(): string {
+    return meta.dense_metadata.metadata.label ?? ''
+  }
+
+  function dimDesc(m: HistMetaPayload): string {
+    const axes = m.dense_metadata.axes
+    const names = axes.map((a) => a.metadata?.name ?? '').filter(Boolean)
+    return `${axes.length}D${names.length ? ' · ' + names.join(' × ') : ''}`
+  }
+
+  function selectionTags(sel: Record<string, string | number>): string[] {
+    return Object.entries(sel).map(([k, v]) => `${k}=${v}`)
   }
 </script>
 
 <div class="hist-view">
-  {#if data}
-    <div class="header">
-      <span class="name">{data.name || hist_id.slice(0, 12)}</span>
-      {#if data.label}
-        <span class="label">{data.label}</span>
+  <div class="header">
+    <div class="header-left">
+      <span class="name">{histName()}</span>
+      {#if histLabel()}
+        <span class="label">{histLabel()}</span>
       {/if}
-      <span class="dim">{dimDesc(data)}</span>
+      {#each selectionTags(selection) as tag (tag)}
+        <span class="tag">{tag}</span>
+      {/each}
     </div>
+    <div class="header-right">
+      <span class="dim">{dimDesc(meta)}</span>
+      <button class="close-btn" on:click={() => dispatch('close')} title="Remove this view">×</button>
+    </div>
+  </div>
+
+  {#if data}
     <svg bind:this={container} class="chart"></svg>
   {:else}
     <div class="loading">Loading {hist_id.slice(0, 12)}…</div>
@@ -57,9 +83,22 @@
   }
   .header {
     display: flex;
-    align-items: baseline;
+    align-items: flex-start;
+    justify-content: space-between;
     gap: 0.5rem;
+  }
+  .header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
     flex-wrap: wrap;
+    min-width: 0;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
   }
   .name {
     font-weight: 700;
@@ -69,11 +108,34 @@
     color: var(--color-muted, #888);
     font-size: 0.85rem;
   }
+  .tag {
+    font-family: 'JetBrains Mono', 'Fira Mono', monospace;
+    font-size: 0.7rem;
+    background: rgba(96, 170, 255, 0.12);
+    border: 1px solid rgba(96, 170, 255, 0.25);
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #60aaff;
+  }
   .dim {
-    margin-left: auto;
     font-size: 0.75rem;
     font-family: monospace;
     color: var(--color-muted, #888);
+  }
+  .close-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    color: var(--color-muted, #888);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 1px 6px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .close-btn:hover {
+    color: var(--color-fg, #e0e0f0);
+    border-color: rgba(255, 255, 255, 0.3);
   }
   .chart {
     width: 100%;

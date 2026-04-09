@@ -2,11 +2,31 @@
   import ServerOverview from './ServerOverview.svelte'
   import RpcThroughput from './RpcThroughput.svelte'
   import CpuUsage from './CpuUsage.svelte'
-  import HistogramList from './HistogramList.svelte'
+  import HistogramLookup from './HistogramLookup.svelte'
   import HistogramView from './HistogramView.svelte'
   import { wsStatus } from '../stores/websocket'
+  import type { HistMetaPayload } from '../types/protocol'
 
-  let selectedId: string | null = null
+  interface SliceView {
+    id: string
+    hist_id: string
+    selection: Record<string, string | number>
+    meta: HistMetaPayload
+  }
+
+  let views: SliceView[] = []
+
+  function addView(event: CustomEvent<{ hist_id: string; token: string | null; selection: Record<string, string | number>; meta: HistMetaPayload }>) {
+    const { hist_id, selection, meta } = event.detail
+    // Use hist_id + serialized selection as a unique key so the same slice isn't duplicated
+    const id = `${hist_id}:${JSON.stringify(selection)}`
+    if (views.some((v) => v.id === id)) return
+    views = [...views, { id, hist_id, selection, meta }]
+  }
+
+  function removeView(id: string) {
+    views = views.filter((v) => v.id !== id)
+  }
 </script>
 
 <div class="layout">
@@ -23,15 +43,21 @@
   </aside>
 
   <main class="content">
-    <HistogramList bind:selectedId />
-    {#if selectedId}
-      {#key selectedId}
-        <div class="detail">
-          <HistogramView hist_id={selectedId} />
-        </div>
-      {/key}
+    <HistogramLookup on:view={addView} />
+
+    {#if views.length > 0}
+      <div class="views-grid">
+        {#each views as view (view.id)}
+          <HistogramView
+            hist_id={view.hist_id}
+            selection={view.selection}
+            meta={view.meta}
+            on:close={() => removeView(view.id)}
+          />
+        {/each}
+      </div>
     {:else}
-      <p class="hint">Click a histogram above to inspect it.</p>
+      <p class="hint">Look up a histogram above to start visualizing.</p>
     {/if}
   </main>
 </div>
@@ -109,11 +135,14 @@
     overflow-y: auto;
     padding: 0;
   }
-  .detail {
+  .views-grid {
     padding: 1rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+    gap: 1rem;
   }
   .hint {
-    padding: 1rem;
+    padding: 2rem 1.25rem;
     color: var(--color-muted, #888);
     font-style: italic;
   }

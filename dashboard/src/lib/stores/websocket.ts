@@ -22,8 +22,8 @@ function _connect() {
 
   _ws.onopen = () => {
     wsStatus.set('open')
-    // Re-subscribe to all streams on reconnect
-    send({ type: 'subscribe', payload: { streams: ['stats', 'hist_list'] } })
+    // Re-subscribe to stats stream on reconnect
+    send({ type: 'subscribe', payload: { streams: ['stats'] } })
   }
 
   _ws.onmessage = (event: MessageEvent) => {

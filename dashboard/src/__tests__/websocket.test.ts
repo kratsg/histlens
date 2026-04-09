@@ -42,9 +42,9 @@ describe('WebSocket store', () => {
   })
 
   it('send() serializes message as JSON', () => {
-    send({ type: 'get_hist', payload: { hist_id: 'abc123' } })
+    send({ type: 'get_hist', payload: { hist_id: 'abc123', selection: {} } })
     const last = MockWS.instance.sent.at(-1)!
-    expect(JSON.parse(last)).toMatchObject({ type: 'get_hist', payload: { hist_id: 'abc123' } })
+    expect(JSON.parse(last)).toMatchObject({ type: 'get_hist', payload: { hist_id: 'abc123', selection: {} } })
   })
 
   it('onMessage routes by type', () => {
@@ -64,13 +64,34 @@ describe('WebSocket store', () => {
     unsub()
   })
 
+  it('onMessage routes hist_meta by type', () => {
+    const handler = vi.fn()
+    const unsub = onMessage('hist_meta', handler)
+
+    MockWS.instance.onmessage?.({
+      data: JSON.stringify({
+        type: 'hist_meta',
+        ts: 1000,
+        payload: {
+          hist_id: 'test123',
+          dense_metadata: { uhi_schema: 1, axes: [], storage: { type: 'double' }, metadata: {} },
+          chunk_axes: [],
+        },
+      }),
+    })
+
+    expect(handler).toHaveBeenCalledOnce()
+    expect(handler.mock.calls[0][0].payload.hist_id).toBe('test123')
+    unsub()
+  })
+
   it('unsubscribe removes handler', () => {
     const handler = vi.fn()
-    const unsub = onMessage('hist_list', handler)
+    const unsub = onMessage('stats', handler)
     unsub()
 
     MockWS.instance.onmessage?.({
-      data: JSON.stringify({ type: 'hist_list', ts: 1000, payload: { items: [] } }),
+      data: JSON.stringify({ type: 'stats', ts: 1000, payload: { histogram_count: 3 } }),
     })
 
     expect(handler).not.toHaveBeenCalled()

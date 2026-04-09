@@ -1,5 +1,6 @@
 import * as d3 from 'd3'
-import type { HistDataPayload, AxisFull } from './types/protocol'
+import type { HistDataPayload, HistMetaPayload, RenderAxis } from './types/protocol'
+import { uhiAxisToRenderAxis, trimFlowBins1D, trimFlowBins2D } from './uhi-axis'
 
 const TRANSITION_MS = 350
 const EASE = d3.easeCubicOut
@@ -125,21 +126,20 @@ function ensureSkeleton1D(container: SVGSVGElement) {
 
 export function render1D(
   container: SVGSVGElement,
-  data: HistDataPayload,
-  axis: AxisFull,
+  values: number[],
+  axis: RenderAxis,
 ) {
   ensureSkeleton1D(container)
 
-  const values = data.values as number[]
   const margin = { top: 20, right: 20, bottom: 44, left: 60 }
   const width = container.clientWidth || 480
   const height = container.clientHeight || 260
   const w = width - margin.left - margin.right
   const h = height - margin.top - margin.bottom
 
-  const isCategorical = 'labels' in axis && axis.labels != null
-  const labels = isCategorical ? (axis as { labels: string[] }).labels : null
-  const edges = !isCategorical ? (axis as { edges: number[] }).edges : null
+  const isCategorical = axis.type === 'categorical'
+  const labels = isCategorical ? axis.labels : null
+  const edges = !isCategorical ? axis.edges : null
 
   // Build bar descriptors. Each bar carries enough info for the tooltip.
   type Bar = { key: string; x0: number; x1: number; xPx: number; wPx: number; value: number; binLabel: string }
@@ -287,11 +287,13 @@ function ensureSkeleton2D(container: SVGSVGElement) {
   cb.append('g').attr('class', 'cb-axis')
 }
 
-export function render2D(container: SVGSVGElement, data: HistDataPayload) {
+export function render2D(
+  container: SVGSVGElement,
+  values: number[][],
+  xAxis: RenderAxis,
+  yAxis: RenderAxis,
+) {
   ensureSkeleton2D(container)
-
-  const values = data.values as number[][]
-  const [xAxis, yAxis] = data.axes
 
   const margin = { top: 20, right: 72, bottom: 48, left: 60 }
   const width = container.clientWidth || 480
@@ -312,10 +314,10 @@ export function render2D(container: SVGSVGElement, data: HistDataPayload) {
   const cellH = h / ny
 
   // X/Y scales for positioning
-  const xEdges = 'edges' in xAxis ? (xAxis as { edges: number[] }).edges : null
-  const yEdges = 'edges' in yAxis ? (yAxis as { edges: number[] }).edges : null
-  const xLabels = 'labels' in xAxis ? (xAxis as { labels: string[] }).labels : null
-  const yLabels = 'labels' in yAxis ? (yAxis as { labels: string[] }).labels : null
+  const xEdges = xAxis.type === 'numeric' ? xAxis.edges : null
+  const yEdges = yAxis.type === 'numeric' ? yAxis.edges : null
+  const xLabels = xAxis.type === 'categorical' ? xAxis.labels : null
+  const yLabels = yAxis.type === 'categorical' ? yAxis.labels : null
 
   const xTickScale = xEdges
     ? d3.scaleLinear().domain([xEdges[0], xEdges[nx]]).range([0, w])
@@ -453,10 +455,20 @@ function fmtCount(v: number): string {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-export function renderHistogram(container: SVGSVGElement, data: HistDataPayload) {
-  if (data.axes.length === 1) {
-    render1D(container, data, data.axes[0])
-  } else {
-    render2D(container, data)
+export function renderHistogram(
+  container: SVGSVGElement,
+  data: HistDataPayload,
+  meta: HistMetaPayload,
+) {
+  const uhiAxes = meta.dense_metadata.axes
+  const renderAxes = uhiAxes.map(uhiAxisToRenderAxis)
+
+  if (renderAxes.length === 1) {
+    const trimmed = trimFlowBins1D(data.values as number[], uhiAxes[0])
+    render1D(container, trimmed, renderAxes[0])
+  } else if (renderAxes.length === 2) {
+    const trimmed = trimFlowBins2D(data.values as number[][], uhiAxes[0], uhiAxes[1])
+    render2D(container, trimmed, renderAxes[0], renderAxes[1])
   }
+  // 3D+ histograms: not yet supported
 }
