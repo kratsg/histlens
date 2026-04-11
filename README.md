@@ -1,3 +1,5 @@
+Now included as part of [histserv](https://github.com/pfackeldey/histserv/pull/3).
+
 # histlens
 
 A real-time observability dashboard for [histserv](https://github.com/pfackeldey/histserv) — a distributed histogram-filling gRPC server in the Scikit-HEP ecosystem.
